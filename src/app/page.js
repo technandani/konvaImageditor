@@ -1,101 +1,267 @@
-import Image from "next/image";
+"use client";
+import { useState, useRef, useEffect } from "react";
+import {
+  Stage,
+  Layer,
+  Image as KonvaImage,
+  Text,
+  Line,
+  Transformer,
+} from "react-konva";
+import useImage from "use-image";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [imageSrc, setImageSrc] = useState(null); // Uploaded image source
+  const [tool, setTool] = useState("none"); // Current tool selection
+  const [lines, setLines] = useState([]); // Freehand drawing
+  const [textBoxes, setTextBoxes] = useState([]); // Text boxes
+  const [selectedTextId, setSelectedTextId] = useState(null); // Selected text for editing
+  const [isTransformerEnabled, setIsTransformerEnabled] = useState(false); // Transformer toggle
+  const [isDraggable, setIsDraggable] = useState(true); // Toggle draggable state
+  const [history, setHistory] = useState([
+    { lines: [], textBoxes: [], imagePosition: { x: 100, y: 50 } },
+  ]);
+  const [historyStep, setHistoryStep] = useState(0); // Current step in history
+  const stageRef = useRef(null); // Reference to Konva stage
+  const transformerRef = useRef(null); // Reference to Transformer for resizing
+  const [image] = useImage(imageSrc); // Load image using useImage hook
+  const imageRef = useRef(null); // Reference for image node
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const isDrawing = useRef(false); // Track drawing state
+
+  // Handle image upload
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setImageSrc(reader.result); // Set image source
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Ensure canvas updates when the image is loaded
+  useEffect(() => {
+    if (imageRef.current && image) {
+      imageRef.current.getLayer().batchDraw();
+    }
+  }, [image]); // Dependency on `image` ensures this runs only when the image changes
+
+  // Manage transformer toggle for resizing
+  useEffect(() => {
+    if (transformerRef.current && isTransformerEnabled && imageRef.current) {
+      transformerRef.current.nodes([imageRef.current]);
+      transformerRef.current.getLayer().batchDraw();
+    } else if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+      transformerRef.current.getLayer().batchDraw();
+    }
+  }, [isTransformerEnabled]); // Dependency on `isTransformerEnabled`
+
+  // Save current state to history
+  const saveHistory = (updatedImagePosition = null) => {
+    const newHistory = history.slice(0, historyStep + 1);
+    const newEntry = {
+      lines,
+      textBoxes,
+      imagePosition:
+        updatedImagePosition ||
+        (imageRef.current
+          ? { x: imageRef.current.x(), y: imageRef.current.y() }
+          : { x: 100, y: 50 }),
+    };
+    setHistory([...newHistory, newEntry]);
+    setHistoryStep(newHistory.length);
+  };
+
+  // Undo functionality
+  const handleUndo = () => {
+    if (historyStep === 0) return;
+    const previousStep = history[historyStep - 1];
+    setLines(previousStep.lines);
+    setTextBoxes(previousStep.textBoxes);
+    if (imageRef.current && previousStep.imagePosition) {
+      imageRef.current.position(previousStep.imagePosition);
+      imageRef.current.getLayer().batchDraw();
+    }
+    setHistoryStep(historyStep - 1);
+  };
+
+  // Redo functionality
+  const handleRedo = () => {
+    if (historyStep === history.length - 1) return;
+    const nextStep = history[historyStep + 1];
+    setLines(nextStep.lines);
+    setTextBoxes(nextStep.textBoxes);
+    if (imageRef.current && nextStep.imagePosition) {
+      imageRef.current.position(nextStep.imagePosition);
+      imageRef.current.getLayer().batchDraw();
+    }
+    setHistoryStep(historyStep + 1);
+  };
+
+  // Handle mouse events for pencil tool
+  const handleMouseDown = (e) => {
+    if (tool !== "pencil") return;
+    isDrawing.current = true;
+    const pos = e.target.getStage().getPointerPosition();
+    setLines([...lines, { points: [pos.x, pos.y] }]);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDrawing.current || tool !== "pencil") return;
+    const pos = e.target.getStage().getPointerPosition();
+    const lastLine = lines[lines.length - 1];
+    lastLine.points = lastLine.points.concat([pos.x, pos.y]);
+    lines.splice(lines.length - 1, 1, lastLine);
+    setLines([...lines]);
+  };
+
+  const handleMouseUp = () => {
+    if (isDrawing.current) saveHistory();
+    isDrawing.current = false;
+  };
+
+  const addTextBox = () => {
+    const newTextBox = {
+      id: textBoxes.length,
+      x: 350,
+      y: 100,
+      text: "Double-click to edit",
+    };
+    setTextBoxes([...textBoxes, newTextBox]);
+    saveHistory();
+  };
+
+  const handleTextEdit = (id) => {
+    const text = textBoxes.find((box) => box.id === id);
+    const newText = prompt("Edit text:", text.text);
+    if (newText) {
+      const updatedTextBoxes = textBoxes.map((box) =>
+        box.id === id ? { ...box, text: newText } : box
+      );
+      setTextBoxes(updatedTextBoxes);
+      saveHistory();
+    }
+  };
+
+  const saveCanvas = () => {
+    const uri = stageRef.current.toDataURL();
+    const link = document.createElement("a");
+    link.download = "design.png";
+    link.href = uri;
+    link.click();
+  };
+
+  const toggleTransformer = () => {
+    setIsTransformerEnabled(!isTransformerEnabled);
+  };
+
+  return (
+    <div>
+      <h1 className="font-bold">Design Page</h1>
+
+      {/* Toolbar */}
+      <div className="flex gap-2 items-center	justify-center mt-6 mb-4">
+        <button onClick={handleUndo}>
+          <img src="images/undo.png" style={{ height: "20px" }} alt="" />
+        </button>
+        <button onClick={handleRedo}>
+          <img src="images/redo.png" style={{ height: "20px" }} alt="" />
+        </button>
+        <div>
+          <button
+            onClick={() => setTool(tool === "pencil" ? "none" : "pencil")}
+            className="p-3"
+            style={{
+              backgroundColor: tool === "pencil" ? "#646cff" : "#1a1a1a",
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            <img
+              src="images/pencil.png"
+              style={{
+                height: "20px",
+                transform: tool === "pencil" ? "scale(1.5)" : "scale(1)",
+                transition: "transform 0.2s ease",
+              }}
+              alt="Pencil Tool"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* <input type="file" accept="image/*" onChange={handleImageUpload} /> */}
+        <button className="file-input-container">
+          <input
+            type="file"
+            accept="image/*"
+            id="file-upload"
+            className="file-input"
+            onChange={handleImageUpload}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          <label for="file-upload" className="file-label">
+            Upload Image
+          </label>
+        </button>
+        <button onClick={addTextBox}>Add Text</button>
+        <button
+          onClick={toggleTransformer}
+          style={{
+            backgroundColor: isTransformerEnabled ? "#646cff" : "#1a1a1a",
+          }}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {isTransformerEnabled ? "Disable Resize" : "Enable Resize"}
+        </button>
+        <button onClick={saveCanvas}>Download Design</button>
+      </div>
+
+      <Stage
+        width={800}
+        height={450}
+        style={{ border: "1px solid #fff", backgroundColor: "#121212" }}
+        onMouseDown={handleMouseDown}
+        onMousemove={handleMouseMove}
+        onMouseup={handleMouseUp}
+        ref={stageRef}
+      >
+        <Layer>
+          {image && (
+            <KonvaImage
+              image={image}
+              draggable={isDraggable}
+              ref={imageRef}
+              onDragEnd={(e) =>
+                saveHistory({ x: e.target.x(), y: e.target.y() })
+              }
+              x={history[historyStep]?.imagePosition?.x || 100}
+              y={history[historyStep]?.imagePosition?.y || 50}
+              height={400}
+              width={(image.width / image.height) * 400}
+            />
+          )}
+          <Transformer ref={transformerRef} />
+          {lines.map((line, i) => (
+            <Line
+              key={i}
+              points={line.points}
+              stroke="red"
+              strokeWidth={2}
+              tension={0.5}
+              lineCap="round"
+            />
+          ))}
+          {textBoxes.map((box) => (
+            <Text
+              key={box.id}
+              text={box.text}
+              x={box.x}
+              y={box.y}
+              draggable={isDraggable}
+              fontSize={20}
+              onDragEnd={(e) => handleTextEdit(box.id)}
+              onDblClick={() => handleTextEdit(box.id)}
+            />
+          ))}
+        </Layer>
+      </Stage>
     </div>
   );
 }
