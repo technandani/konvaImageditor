@@ -3,8 +3,6 @@
 ## Overview
 A single-page web application that allows users to upload, edit, and download images using **Konva.js**.
 
----
-
 ## Features
 - **Upload Image**: Users can upload images from their device.
 - **Edit Tools**:
@@ -13,7 +11,6 @@ A single-page web application that allows users to upload, edit, and download im
   - Resize and rotate images.
 - **Download Image**: Save the edited image as a PNG file.
 
----
 
 ## Demo Link
 
