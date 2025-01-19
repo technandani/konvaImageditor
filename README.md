@@ -15,9 +15,22 @@ A single-page web application that allows users to upload, edit, and download im
 
 ---
 
+## Demo Link
+
+Frontend Demo: [Link](https://konva-image-editor.vercel.app/)
+
+---
+
 ## Tech Stack
 - **Frontend Framework**: next.js
 - **Canvas Library**: Konva.js
 - **Styling**: Tailwind CSS
+
+---
+
+## screenshot
+
+![Screenshot (260)](https://github.com/user-attachments/assets/c442e966-eeb6-4132-9cc3-11cd44616100)
+
 
 ---
